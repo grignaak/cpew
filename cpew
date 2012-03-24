@@ -5,50 +5,60 @@
 ##
 ## This code is free, you may do whatever you want with it.
 
-function die {
-	echo $1
-	exit 1
+FROZEN_DIR=0
+OLD_WORKSPACE=~/tools/ECLIPSE_WS_TEMPLATE
+WORKSPACE_DIR=/Volumes/Unix/workspaces
+
+function freeze_dir {
+    if [[ "$FROZEN_DIR" = "1" ]]; then
+        chmod "u-w" $WORKSPACE_DIR
+        if [ ! $? ]; then
+            echo Could not make "$WORKSPACE_DIR" read-only
+            return 1
+        fi
+    fi
+    return 0
 }
 
+function die {
+    echo $1
+    freeze_dir
+    exit 1
+}
+
+
 if [ $(whoami) = "root" ]; then
-	echo "Don't do this as root"
-	exit 1
+    echo "Don't do this as root"
+    exit 1
 fi
 
-if [ "$#" = "1" -a "$1" = "-i" ]; then
-	echo -n "Path to old workspace: "
-	read OLD_WORKSPACE
-	echo -n "Path to new workspace: "
-	read NEW_WORKSPACE
-fi
-
-if [ "$#" = "2" ]; then
-	OLD_WORKSPACE=$1;
-	NEW_WORKSPACE=$2;
-fi
-
-if [ "$#" = "0" -o "$#" -gt "2" ]; then
-	echo usage: $0 [-i] old-workspace new-workspace
-	exit 1
+if [ "$#" = "1" ]; then
+    NEW_WORKSPACE=$1;
+else
+    echo usage: $0 new-workspace
+    echo
+    echo copies workspace settings from $OLD_WORKSPACE to $WORKSPACE_DIR/new-workspace
+    exit 1
 fi
 
 if [[ ! ( ( -d "$OLD_WORKSPACE" ) && ( -r "$OLD_WORKSPACE" ) ) ]]; then
-	echo $OLD_WORKSPACE is not a readable directory
-	exit 1
+    echo $OLD_WORKSPACE is not a readable directory
+    exit 1
 fi
 
-WORKSPACE_DIR=`dirname $NEW_WORKSPACE`
-
-if [[ ! ( ( -d "$WORKSPACE_DIR" ) && ( -w "$WORKSPACE_DIR" ) ) ]]; then
-	echo $WORKSPACE_DIR is not a writable directory
-	exit 1
+if [[ ! ( -d "$WORKSPACE_DIR" ) ]]; then
+    echo $WORKSPACE_DIR is not a directory
+    exit 1
+elif [[ ! ( -w "$WORKSPACE_DIR" )  ]]; then
+    FROZEN_DIR=1
+    chmod u+w "$WORKSPACE_DIR" || die Could not make "$WORKSPACE_DIR" writable
 fi
 
-mkdir -p "$NEW_WORKSPACE" || die Could not create directory $NEW_WORKSPACE
+mkdir -p "$WORKSPACE_DIR/$NEW_WORKSPACE" || die Could not create directory $WORKSPACE_DIR/$NEW_WORKSPACE
 
-mkdir -p "$NEW_WORKSPACE/.metadata/.plugins/org.eclipse.core.runtime/" || die Could not create eclipse settings directory
+mkdir -p "$WORKSPACE_DIR/$NEW_WORKSPACE/.metadata/.plugins/org.eclipse.core.runtime/" || die Could not create eclipse settings directory
 
-cp -R "$OLD_WORKSPACE/.metadata/.plugins/org.eclipse.core.runtime/.settings/" "$NEW_WORKSPACE/.metadata/.plugins/org.eclipse.core.runtime/" || die Could not copy old settings
+cp -R "$OLD_WORKSPACE/.metadata/.plugins/org.eclipse.core.runtime/.settings/" "$WORKSPACE_DIR/$NEW_WORKSPACE/.metadata/.plugins/org.eclipse.core.runtime/.settings" || die Could not copy old settings
 
-echo New workspace created. Now start your Eclipse and point it to the $NEW_WORKSPACE workspace
-
+echo New workspace created. Now start your Eclipse and point it to the $WORKSPACE_DIR/$NEW_WORKSPACE workspace
+freeze_dir || exit 1
