@@ -1,54 +1,68 @@
 #!/bin/bash
 
-## Create new eclipse workspace and copy the settings from the old workspace
-## Tomas Kramar, kramar.tomas@gmail.com, 2008
-##
-## This code is free, you may do whatever you want with it.
+# Make a soft-link to a common eclipse settings directory.  When changing
+# eclipse settings, it changes across all linked workspaces.
+#
+# This assumes all workplaces are in $WORKSPACE_ROOT, which is also assumed to
+# have been "locked" by chmod a-w to prevent accidently making a workspace in
+# eclipse.
+#
+# This has not been tested when multiple workspaces are open at the same time.
+
+### settings ###
+
+WORKSPACE_ROOT=/Volumes/Unix/workspaces/
+TEMPLATE=~/tools/ECLIPSE_WS_TEMPLATE
 
 function die {
-	echo $1
-	exit 1
+     echo "$1"; exit 1
 }
 
-if [ $(whoami) = "root" ]; then
-	echo "Don't do this as root"
-	exit 1
+### read and check input ###
+
+if [ "$#" = "1" ]; then
+    DESTINATION="$1"
+elif [ "$#" = "2"]; then
+    TEMPLATE="$1"
+    DESTINATION="$2"
+else
+    die "usage: $0 [-i] old-workspace new-workspace"
 fi
 
-if [ "$#" = "1" -a "$1" = "-i" ]; then
-	echo -n "Path to old workspace: "
-	read OLD_WORKSPACE
-	echo -n "Path to new workspace: "
-	read NEW_WORKSPACE
-fi
+[ $(whoami) != "root" ] || die "Don't do this as root"
+[ -d "$WORKSPACE_ROOT" ] || die "$WORKSPACE_ROOT needs to be a directory"
+[[ ( -d "$TEMPLATE" ) && ( -r "$TEMPLATE" ) ]] || die "$TEMPLATE is not a readable directory"
+[ $(dirname "$DESTINATION") = "." ] || die "$DESTINATION should be a directory name to go under $WORKSPACE_ROOT"
 
-if [ "$#" = "2" ]; then
-	OLD_WORKSPACE=$1;
-	NEW_WORKSPACE=$2;
-fi
 
-if [ "$#" = "0" -o "$#" -gt "2" ]; then
-	echo usage: $0 [-i] old-workspace new-workspace
-	exit 1
-fi
 
-if [[ ! ( ( -d "$OLD_WORKSPACE" ) && ( -r "$OLD_WORKSPACE" ) ) ]]; then
-	echo $OLD_WORKSPACE is not a readable directory
-	exit 1
-fi
+### create the workspace ###
 
-WORKSPACE_DIR=`dirname $NEW_WORKSPACE`
+SETTINGS=.metadata/.plugins/org.eclipse.core.runtime/.settings
+SETTINGS_DIR=`dirname $SETTINGS`
 
-if [[ ! ( ( -d "$WORKSPACE_DIR" ) && ( -w "$WORKSPACE_DIR" ) ) ]]; then
-	echo $WORKSPACE_DIR is not a writable directory
-	exit 1
-fi
+function un-lock {
+    chmod a+w "$WORKSPACE_ROOT"
+}
+function re-lock {
+    chmod a-w "$WORKSPACE_ROOT"
+}
+function scramble {
+     re-lock; die "$1"
+}
 
-mkdir -p "$NEW_WORKSPACE" || die Could not create directory $NEW_WORKSPACE
 
-mkdir -p "$NEW_WORKSPACE/.metadata/.plugins/org.eclipse.core.runtime/" || die Could not create eclipse settings directory
+un-lock || scramble "Could not unlock $WORKSPACE_ROOT"
 
-cp -R "$OLD_WORKSPACE/.metadata/.plugins/org.eclipse.core.runtime/.settings/" "$NEW_WORKSPACE/.metadata/.plugins/org.eclipse.core.runtime/" || die Could not copy old settings
+mkdir "$WORKSPACE_ROOT/$DESTINATION" || scramble "Could not create directory $DESTINATION"
+mkdir -p "$WORKSPACE_ROOT/$DESTINATION/$SETTINGS_DIR" || scramble "Could not create eclipse settings directory"
 
-echo New workspace created. Now start your Eclipse and point it to the $NEW_WORKSPACE workspace
+ln -s "$TEMPLATE/$SETTINGS" "$WORKSPACE_ROOT/$DESTINATION/$SETTINGS_DIR" || scramble "Could not copy old settings"
+
+re-lock || die "Could not re-lock $WORKSPACE_ROOT/$DESTINATION"
+
+
+### thank you come again ###
+
+echo New workspace created. Now start your Eclipse and point it to the $WORKSPACE_ROOT/$DESTINATION workspace
 
